@@ -46,9 +46,11 @@
 #include <cstdio>
 #include <cstring>
 #include <format>
+#include <numeric>
 #include <iomanip>
 #include <iostream>
 #include <optional>
+#include <span>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -388,14 +390,15 @@
          * @param data - Payload to run calc on
          * @return - Checksum value % 256
         */
-        [[nodiscard]] static byte ComputeChecksum128(const std::array<byte, protocol::kBlockSize>& data)
+        [[nodiscard]] static byte ComputeChecksum128(std::span<const byte> data)
         {
-            byte checksum = 0;
-            for (const byte value : data)
-            {
-                checksum = static_cast<byte>(checksum + value);
-            }
-            return checksum;
+            // CYGNOTE: The std::span<T> type is great for some of the same reasons as is the
+            // generic C# Span<T>, except that it's not a forced stack type (it can be used as
+            // a member variable). You do, however, have to manage the lifetime of the span
+            // versus the memory it references.
+            //
+            // Also, you could use std::accumulate instead of a loop:
+            return static_cast<byte>(std::accumulate(data.begin(), data.end(), 0));
         }
 
         /**
