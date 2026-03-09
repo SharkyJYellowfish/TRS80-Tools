@@ -40,16 +40,17 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
-#include <cstring>
 #include <format>
 #include <numeric>
 #include <iomanip>
 #include <iostream>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <system_error>
@@ -823,7 +824,19 @@
 
                 if (bytesRead < blockData.size())
                 {
-                    std::memset(blockData.data() + bytesRead, protocol::kPadByte, blockData.size() - bytesRead);
+                    // CYGNOTE: There are standard algorithms that are now preferred over std::memset.
+                    //
+                    // For:
+                    //   std::memset(blockData.data() + bytesRead, protocol::kPadByte, blockData.size() - bytesRead);
+                    //
+                    // ...you could do:
+                    //   std::fill(blockData.begin() + bytesRead, blockData.end(), protocol::kPadByte);
+                    //
+                    // ...or, using std::ranges:
+                    //   std::ranges::fill(std::ranges::subrange(blockData.begin() + bytesRead, blockData.end()), protocol::kPadByte);
+                    //
+                    // ...or, using std::ranges and the range adapter pipeline operator '|':
+                    std::ranges::fill(blockData | std::views::drop(bytesRead), protocol::kPadByte);
                 }
 
                 // calc checksum on block and create header to send
