@@ -1,0 +1,9 @@
+Debug/
+packages/
+.vs/
+*.asf
+Log.txt
+CaptureManagerLibrary.dll
+Bin/
+Release/
+CaptureManagerSDK*
