@@ -53,6 +53,7 @@
 #include <ranges>
 #include <span>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -153,12 +154,12 @@
          * @param operation - tracing
          * @return - none
          */
-        static void CheckWin32Call(const BOOL result, std::string operation)
+        static void CheckWin32Call(const BOOL result, const std::string_view operation)
         {
             if (!result)
             {
                 throw std::system_error(static_cast<int>(GetLastError()), std::system_category(),
-                    std::string(std::move(operation)));
+                    std::string(operation));
             }
         }
 
@@ -168,12 +169,12 @@
          * @param operation - for debug tracing
          * @return - Valid Win32 handle
          */
-        static HANDLE CheckCreatedHandle(const HANDLE handle, std::string operation)  // NOLINT(misc-use-anonymous-namespace)
+        static HANDLE CheckCreatedHandle(const HANDLE handle, std::string_view operation)  // NOLINT(misc-use-anonymous-namespace)
         {
             if (handle == INVALID_HANDLE_VALUE)
             {
                 throw std::system_error(static_cast<int>(GetLastError()), std::system_category(),
-                    std::string(std::move(operation)));
+                    std::string(operation));
             }
             return handle;
         }
@@ -204,13 +205,17 @@
          * @param comArgument - COM port
          * @return - stringized UNC path for COM port
          */
-        [[nodiscard]] static std::string BuildComDevicePath(const std::string& comArgument)  // NOLINT(misc-use-anonymous-namespace)
+        [[nodiscard]] static std::string BuildComDevicePath(std::string_view comArgument)  // NOLINT(misc-use-anonymous-namespace)
         {
-            if (comArgument.starts_with("COM") || comArgument.starts_with("com"))
+            // CYGNOTE: The "const std::string&" argument can be replaced with a non-owning
+            // std::string_view.
+
+            if (comArgument.starts_with("COM") ||
+                comArgument.starts_with("com"))
             {
-                return std::string(R"(\\.\)") + comArgument;
+                return std::format("{}{}", R"(\\.\)", comArgument);
             }
-            return comArgument;
+            return std::string(comArgument);
         }
 
         /**
@@ -275,7 +280,7 @@
          * @param operation - for tracing
          * @return - none
         */
-        static void WriteAll(const HANDLE handle, const void* buffer, const DWORD byteCount, const std::string& operation)
+        static void WriteAll(const HANDLE handle, const void* buffer, const DWORD byteCount, std::string_view operation)
         {
             DWORD bytesWritten = 0;
             CheckWin32Call(WriteFile(handle, buffer, byteCount, &bytesWritten, nullptr), operation);
@@ -305,9 +310,9 @@
          * @return - none
         */
         static void WriteFileBlock(const HANDLE fileHandle, const void* buffer, const DWORD byteCount,
-                                   const std::string &operation)
+                                   std::string_view operation)
         {
-            WriteAll(fileHandle, buffer, byteCount, std::move(operation));
+            WriteAll(fileHandle, buffer, byteCount, operation);
         }
 
         /**
@@ -408,7 +413,7 @@
          * @param baudRate - Expressed as an integer, bounded by supported hardware
          * @return - RAII wrapped Win32 handle
         */
-        [[nodiscard]] static UniqueHandle OpenSerialPort(const std::string& comArgument, const DWORD baudRate)
+        [[nodiscard]] static UniqueHandle OpenSerialPort(std::string_view comArgument, const DWORD baudRate)
         {
             // build COM port path per Windows rules
             const std::string devicePath = BuildComDevicePath(comArgument);
