@@ -116,7 +116,12 @@
         case cli::kOptionPort:
             if (getOptState.optarg == nullptr)
             {
-                std::fprintf(stderr, std::format("{} -{}\n", parseErr::invalidOptionMsg, static_cast<char>(cli::kOptionPort)).c_str());
+                // CYGNOTE: std::format() returns a std::string; accessing c_str() on it from
+                // within the std::fprintf() call returns a value, but then the std::string
+                // itself will be destroyed prior to the std::fprintf() call. Hello there,
+                // undefined behavior, how are you?
+                const auto msg = std::format("{} -{}\n", parseErr::invalidOptionMsg, static_cast<char>(cli::kOptionPort));
+                std::fprintf(stderr, "%s", msg.c_str());
                 return std::nullopt;
             }
             options.comPort = getOptState.optarg;
@@ -127,7 +132,8 @@
         {
             if (getOptState.optarg == nullptr)
             {
-                std::fprintf(stderr, std::format("{} -{}\n", parseErr::invalidOptionMsg, static_cast<char>(cli::kOptionBaud)).c_str());
+                const auto msg = std::format("{} -{}\n", parseErr::invalidOptionMsg, static_cast<char>(cli::kOptionBaud));
+                std::fprintf(stderr, "%s", msg.c_str());
                 return std::nullopt;
             }
 
@@ -146,7 +152,8 @@
         case cli::kOptionFile:
             if (getOptState.optarg == nullptr)
             {
-                std::fprintf(stderr, std::format("{} -{}\n", parseErr::invalidOptionMsg, static_cast<char>(cli::kOptionFile)).c_str());
+                const auto msg = std::format("{} -{}\n", parseErr::invalidOptionMsg, static_cast<char>(cli::kOptionFile));
+                std::fprintf(stderr, "%s", msg.c_str());
                 return std::nullopt;
             }
 
@@ -157,11 +164,13 @@
         default:
             if (getOptState.optopt != 0)
             {
-                std::fprintf(stderr, std::format("{} -{}\n", parseErr::invalidOptionMsg, static_cast<char>(getOptState.optopt)).c_str());
+                const auto msg = std::format("{} -{}\n", parseErr::invalidOptionMsg, static_cast<char>(getOptState.optopt));
+                std::fprintf(stderr, "%s", msg.c_str());
             }
             else
             {
-                std::fprintf(stderr, std::format("{}.\n", parseErr::invalidOptionMsg).c_str());
+                const auto msg = std::format("{}.\n", parseErr::invalidOptionMsg);
+                std::fprintf(stderr, "%s", msg.c_str());
             }
             return std::nullopt;
         }
