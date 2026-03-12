@@ -455,7 +455,7 @@
         }
 
         /**
-         * @brief Use 'magic' to print current block number 'in place'
+         * @brief Use 'magic' to print current block numberblock number 'in place'
          * @param value - Current block number % 256
          * @return - Checksum value % 256
         */
@@ -582,6 +582,7 @@
                 if (g_cancelRequested.load())
                 {
                     SendCancelSequence(serialHandle);
+                    PrintProgressHeader(serial::newLine);
                     return ExitCode::Interrupted;
                 }
 
@@ -596,6 +597,7 @@
                     if (!SendReceiveRetryNak(serialHandle, retryCount))
                     {
                         SendCancelSequence(serialHandle);
+                        PrintProgressHeader(serial::newLine);
                         return ExitCode::ReceiveRetryLimitReached;
                     }
                     continue;
@@ -605,6 +607,7 @@
                 if (leadByte == protocol::kEot)
                 {
                     WriteByte(serialHandle, protocol::kAck);
+                    PrintProgressHeader(serial::newLine);
                     return ExitCode::Success;
                 }
 
@@ -619,6 +622,7 @@
                     if (!SendReceiveRetryNak(serialHandle, retryCount))
                     {
                         SendCancelSequence(serialHandle);
+                        PrintProgressHeader(serial::newLine);
                         return ExitCode::ReceiveRetryLimitReached;
                     }
                     continue;
@@ -638,6 +642,7 @@
                     {
                         // go through the cancel motions and return retry error
                         SendCancelSequence(serialHandle);
+                        PrintProgressHeader(serial::newLine);
                         return ExitCode::ReceiveRetryLimitReached;
                     }
                     continue;
@@ -660,6 +665,7 @@
                     if (!SendReceiveRetryNak(serialHandle, retryCount))
                     {
                         SendCancelSequence(serialHandle);
+                        PrintProgressHeader(serial::newLine);
                         return ExitCode::ReceiveRetryLimitReached;
                     }
                     continue;
@@ -672,6 +678,7 @@
                     if (!SendReceiveRetryNak(serialHandle, retryCount))
                     {
                         SendCancelSequence(serialHandle);
+                        PrintProgressHeader(serial::newLine);
                         return ExitCode::ReceiveRetryLimitReached;
                     }
 
@@ -692,6 +699,7 @@
                 if (blockNumber != expectedBlock)
                 {
                     SendCancelSequence(serialHandle);
+                    PrintProgressHeader(serial::newLine);
                     return ExitCode::ReceiveOutOfSequenceBlock;
                 }
 
@@ -805,6 +813,7 @@
                 if (g_cancelRequested.load())
                 {
                     SendCancelSequence(serialHandle);
+                    PrintProgressHeader(serial::newLine);
                     return ExitCode::Interrupted;
                 }
 
@@ -834,6 +843,7 @@
                     if (g_cancelRequested.load())
                     {
                         SendCancelSequence(serialHandle);
+                        PrintProgressHeader(serial::newLine);
                         return ExitCode::Interrupted;
                     }
 
@@ -842,8 +852,8 @@
                     progressBlockNumber = static_cast<byte>(progressBlockNumber + 1);
 
                     // send header and data
-                    WriteAll(serialHandle, header.data(), static_cast<DWORD>(header.size()), "WriteFile(COM hdr)");
-                    WriteAll(serialHandle, blockData.data(), static_cast<DWORD>(blockData.size()), "WriteFile(COM data)");
+                    WriteAll(serialHandle, header.data(), static_cast<DWORD>(header.size()), std::format("{}(hdr)", NAMEOF(WriteFile)));
+                    WriteAll(serialHandle, blockData.data(), static_cast<DWORD>(blockData.size()), std::format("{}(COM)", NAMEOF(WriteFile)));
                     WriteAll(serialHandle, &checksum, sizeof(checksum), std::format("{}(COM)", NAMEOF(WriteFile)));
 
                     // get next state and branch as appropriate
@@ -855,6 +865,8 @@
                     }
                     if (gotResponse && response == protocol::kCan)
                     {
+                        PrintProgressHeader(serial::newLine);
+                        PrintProgressHeader(serial::newLine);
                         return ExitCode::SendCancelledByPeer;
                     }
 
@@ -863,6 +875,7 @@
                     if (retryCount >= retry::kMaxPacketRetries)
                     {
                         SendCancelSequence(serialHandle);
+                        PrintProgressHeader(serial::newLine);
                         return ExitCode::SendRetryLimitReached;
                     }
                 }
@@ -878,6 +891,7 @@
                 if (g_cancelRequested.load())
                 {
                     SendCancelSequence(serialHandle);
+                    PrintProgressHeader(serial::newLine);
                     return ExitCode::Interrupted;
                 }
 
@@ -887,15 +901,18 @@
                 const bool gotResponse = WaitForAckNakOrCancel(serialHandle, response);
                 if (gotResponse && response == protocol::kAck)
                 {
+                    PrintProgressHeader(serial::newLine);
                     return ExitCode::Success;
                 }
                 if (gotResponse && response == protocol::kCan)
                 {
+                    PrintProgressHeader(serial::newLine);
                     return ExitCode::SendCancelledByPeer;
                 }
                 if (retryCount + 1 >= retry::kMaxPacketRetries)
                 {
                     SendCancelSequence(serialHandle);
+                    PrintProgressHeader(serial::newLine);
                     return ExitCode::SendEotRetryLimitReached;
                 }
             }
@@ -909,6 +926,10 @@
         */
         [[nodiscard]] static ExitCode Run(const int argc, char** argv)
         {
+            //
+            PrintProgressHeader(info::headerMsg);
+
+            // set app to intercept and respond to control signals
             CheckWin32Call(SetConsoleCtrlHandler(CtrlHandler, TRUE), NAMEOF(SetConsoleCtrlHandler));
 
             // parse command line and check for errors

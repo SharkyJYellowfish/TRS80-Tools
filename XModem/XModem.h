@@ -32,7 +32,6 @@
     #define NOMINMAX
     #endif
 
-    #include <cstddef>
     #include <cstdint>
     #include <windows.h>
 
@@ -70,7 +69,8 @@
     {
         constexpr DWORD kSetupBufferBytes = 64U * 1024U;
         constexpr DWORD kCommShareMode = 0;
-        constexpr const char *blockNumMsg = "BLOCK NUMBER:   ";
+        constexpr const char* blockNumMsg = "BLOCK NUMBER:   ";
+        constexpr const char* newLine = "\n";
     } // namespace serial
 
     namespace retry
@@ -79,3 +79,7 @@
         constexpr int kInitialNakAttempts = 80; // ASM E=0x50
     } // namespace retry
 
+    namespace info
+    {
+        constexpr const char* headerMsg = "SYF XModem File Transfer Utility v1.0\n";
+    }
