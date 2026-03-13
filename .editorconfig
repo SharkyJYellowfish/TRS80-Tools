@@ -1,0 +1,30 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.cs]
+indent_style = tab
+indent_size = 4
+tab_width = 4
+
+dotnet_style_prefer_interpolated_string_expressions = true:suggestion
+
+[*.{c,cc,cpp,cxx,h,hh,hpp,hxx,inl}]
+indent_style = tab
+indent_size = 4
+tab_width = 4
+
+[*.{sln,vcxproj,vcxproj.filters,props,targets,csproj}]
+indent_style = space
+indent_size = 2
+
+[*.{json,yml,yaml}]
+indent_style = space
+indent_size = 2
