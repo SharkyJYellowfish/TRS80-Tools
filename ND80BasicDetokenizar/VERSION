@@ -1,0 +1,146 @@
+Summary of Changes Made v0.8.0
+==============================
+
+1. Core Detokenizer Fixes
+-------------------------
+
+- Added proper end-of-program handling for linked BASIC line records:
+  - stop when:
+        nextLinePtr == 0 && lineNumber == 0
+  - prevents parsing trailing padding as a fake line 0
+
+- Continued skipping the leading 0xFF file marker before the first line record
+
+- Kept linked-line parsing based on:
+  - uint16 nextLinePtr
+  - uint16 lineNumber
+  - tokenized line body
+  - 0x00 line terminator
+
+
+2. String and Raw-Text Handling
+-------------------------------
+
+- Preserved quoted strings by entering quote mode on `"` and copying bytes
+  literally until the closing `"`.
+
+- Added proper raw-comment handling so the rest of the line is treated as
+  ASCII for:
+  - REM
+  - apostrophe comments
+  - whole-line stored apostrophe-comment form:
+        3A 93 FB ...
+
+- This prevents comment text from being mis-tokenized.
+
+
+3. Compound Relational Operators
+--------------------------------
+
+- Added folding logic for token pairs:
+  - < + >  -> <>
+  - < + =  -> <=
+  - > + =  -> >=
+
+- Fixed previous bad output such as:
+      IF FK < >1
+
+- Now emits:
+      IF FK<>1
+
+
+4. Token Map Cleanup and Corrections
+------------------------------------
+
+- Removed provisional fake duplicate mappings for:
+  - 0xBF
+  - 0xC0
+  - 0xC1
+
+- Later replaced them with inferred real meanings based on actual program use:
+  - 0xBF -> USING
+  - 0xC0 -> VARPTR
+  - 0xC1 -> USR
+
+- Retained normal BASIC/function token decoding for the rest of the token set.
+
+
+5. Spacing Logic Fixes
+----------------------
+
+- Fixed broken leading-space logic that always returned true.
+  - Old logic effectively forced spaces almost everywhere.
+
+- Expanded operator recognition so spacing logic treats these as operators:
+      +  -  *  /  ^  =  >  <  <>  <=  >=
+
+- Added context-sensitive spacing rules so function-style tokens do not get
+  a synthetic space before `(`.
+
+- This improved output such as:
+  - LEN(X$)           instead of LEN (X$)
+  - INSTR(IN$,"%")    instead of INSTR (IN$,"%")
+  - VARPTR(ID$)       instead of VARPTR (ID$)
+
+
+6. Embedded Control Character Handling
+--------------------------------------
+
+- Changed visible-ASCII handling so embedded 0x0A / 0x0D inside tokenized
+  line data are ignored instead of becoming real output newlines.
+
+- This fixed the bug where one BASIC line could be split across multiple
+  output lines.
+
+
+7. Unknown Token Visibility
+---------------------------
+
+- Kept unknown-token fallback output as visible hex markers:
+      <$XX>
+
+- This remains useful for future token-map corrections when anything
+  unresolved still appears.
+
+
+8. Console App / UX Updates
+---------------------------
+
+- Added one-line startup banner:
+      NewDOS/80 Disk Basic Detokenizer Utility v1.0.0
+
+- Added argument validation and help/usage output.
+
+- Added support for help switches:
+  - -h
+  - --help
+  - /h
+  - /?
+
+- Added usage text describing expected input and output file arguments.
+
+
+9. Current Behavior After These Changes
+---------------------------------------
+
+- Correctly detokenizes linked NewDOS/80 BASIC program lines
+- Handles strings correctly
+- Handles REM and apostrophe comments correctly
+- Folds compound relational operators correctly
+- Resolves USING, VARPTR, and USR
+- Produces much cleaner BASIC output with far fewer spacing artifacts
+- No longer injects unwanted line breaks from embedded LF bytes
+
+
+10. Still Open / Not Yet Finalized
+----------------------------------
+
+- USR formatting still has some spacing artifacts in forms like:
+  - DEF USR 0=...
+  - USR 3(ERR)
+
+- Output spacing is much closer now, but not yet fully canonical to original
+  TRS-80 ASCII SAVE formatting.
+
+- Missing THEN is intentionally not treated as an error, since that is
+  expected source style.
