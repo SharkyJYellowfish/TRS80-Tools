@@ -1,6 +1,7 @@
 using System.Text;
-using System.Linq;
 
+// ReSharper disable StringLiteralTypo
+// ReSharper disable once CheckNamespace
 namespace NewDos80BasicDetokenizer
 {
 	public class NewDos80Detokenizer
@@ -8,6 +9,7 @@ namespace NewDos80BasicDetokenizer
 		/// <summary>
 		/// NewDOS/80 Disk Basic tokens (include MS interpreted BASIC tokens in ROM) 
 		/// </summary>
+		// ReSharper disable once InconsistentNaming
 		private static readonly Dictionary<byte, string> _tokenMap = new Dictionary<byte, string>
 		{
 			{ 0x80, "END" },
@@ -73,10 +75,10 @@ namespace NewDos80BasicDetokenizer
 			{ 0xBC, "TAB(" },
 			{ 0xBD, "TO" },
 			{ 0xBE, "FN" },
-			{ 0xBF, "LLIST" },   // keep only if your dialect really uses this value
-		    { 0xC0, "DELETE" },  // suspicious duplicate; keep provisional
-		    { 0xC1, "AUTO" },    // suspicious duplicate; keep provisional
-		    { 0xC2, "ERL" },
+			{ 0xBF, "USING" },
+			{ 0xC0, "VARPTR" },
+			{ 0xC1, "USR" },
+			{ 0xC2, "ERL" },
 			{ 0xC3, "ERR" },
 			{ 0xC4, "STRING$" },
 			{ 0xC5, "INSTR" },
@@ -210,27 +212,29 @@ namespace NewDos80BasicDetokenizer
 		/// </summary>
 		/// <param name="line">Line byte stream input</param>
 		/// <returns>ASCII line</returns>
-		private string DetokenizeLine(byte[] line)
+		private static string DetokenizeLine(byte[] line)
 		{
 			switch (line.Length)
 			{
-				case 0:
-					return string.Empty;
-				// Special case observed in test files...
-				// 3A 93 FB <text...>
-				// This corresponds to apostrophe-comment text.
-				case >= 3 when line[0] == 0x3A && line[1] == 0x93 && line[2] == 0xFB:
-					return "'" + DecodeRawAscii(line, 3);
+			case 0:
+				return string.Empty;
+
+			// Whole-line apostrophe comment as stored internally:
+			// 3A 93 FB <text...>
+			case >= 3 when line[0] == 0x3A && line[1] == 0x93 && line[2] == 0xFB:
+				return "'" + DecodeRawAscii(line, 3);
 			}
 
-			// housekeeping
 			var sb = new StringBuilder();
 			var inQuote = false;
 
-			// loop through bytes...
-			foreach (var b in line)
+			for (var i = 0; i < line.Length; i++)
 			{
-				// process quoted text
+				// current byte in line
+				var b = line[i];
+
+				// ReSharper disable once GrammarMistakeInComment
+				// check if we are in the middle of processing a quote
 				if (inQuote)
 				{
 					AppendVisibleAscii(sb, b);
@@ -241,38 +245,99 @@ namespace NewDos80BasicDetokenizer
 					continue;
 				}
 
-				// handles quoted strings
 				switch (b)
 				{
-					case (byte)'"':
-						sb.Append('"');
-						inQuote = true;
-						continue;
-					case < 0x80:
-						AppendVisibleAscii(sb, b);
-						continue;
+				// start processing quoted text
+				case (byte)'"':
+					sb.Append('"');
+					inQuote = true;
+					continue;
+				// handle normal 7-bit ASCII text
+				case < 0x80:
+					AppendVisibleAscii(sb, b);
+					continue;
 				}
 
-				// if token is in map then add to ASCII line we are constructing
+				// check if compound operator and handle accordingly
+				if (TryAppendCompoundOperator(line, ref i, sb))
+				{
+					continue;
+				}
+
+				switch (b)
+				{
+					// Apostrophe comment stored as REM + apostrophe token.
+					// Mid-line form commonly appears after a colon.
+					case 0x93 when i + 1 < line.Length && line[i + 1] == 0xFB:
+					{
+						if (sb.Length == 0 || sb[^1] != ':')
+						{
+							if (NeedsLeadingSpace(sb, "'"))
+							{
+								sb.Append(' ');
+							}
+						}
+
+						sb.Append('\'');
+						sb.Append(DecodeRawAscii(line, i + 2));
+						return sb.ToString();
+					}
+
+					// REM: remainder of line is raw text
+					case 0x93:
+					{
+						if (NeedsLeadingSpace(sb, "REM"))
+						{
+							sb.Append(' ');
+						}
+
+						sb.Append("REM");
+
+						if (i + 1 < line.Length && line[i + 1] != (byte)' ')
+						{
+							sb.Append(' ');
+						}
+
+						sb.Append(DecodeRawAscii(line, i + 1));
+						return sb.ToString();
+					}
+
+					// Apostrophe token by itself: remainder of line is raw text
+					case 0xFB:
+					{
+						if (NeedsLeadingSpace(sb, "'"))
+						{
+							sb.Append(' ');
+						}
+
+						sb.Append('\'');
+						sb.Append(DecodeRawAscii(line, i + 1));
+						return sb.ToString();
+					}
+				}
+
+				// try to convert token to ASCII keyword
 				if (_tokenMap.TryGetValue(b, out var token))
 				{
+					// construct keyword handling spacing as needed
 					if (NeedsLeadingSpace(sb, token))
 					{
 						sb.Append(' ');
 					}
 					sb.Append(token);
-					if (NeedsTrailingSpace(token))
+					if (NeedsTrailingSpace(token, line, i))
 					{
 						sb.Append(' ');
 					}
+
 					continue;
 				}
 
-				// Unknown token: preserve visibly.
+				// unknown token -> covert to hex string and add
 				sb.Append($"<${b:X2}>");
 			}
 
-			// remove any extraneous white space and return
+			// remove extraneous spacing and return expanded line
 			return NormalizeSpacing(sb.ToString());
 		}
 
@@ -291,6 +356,54 @@ namespace NewDos80BasicDetokenizer
 			}
 			return sb.ToString();
 		}
+	
+		/// <summary>
+		/// Handle case when a compound token is detected 
+		/// </summary>
+		/// <param name="line">current text line</param>
+		/// <param name="i">index into line</param>
+		/// <param name="sb">line being built</param>
+		/// <returns>true if compound token, false otherwise</returns>
+		private static bool TryAppendCompoundOperator(byte[] line, ref int i, StringBuilder sb)
+		{
+			// end of processing?
+			if (i + 1 >= line.Length)
+			{
+				return false;
+			}
+
+			// housekeeping
+			var current = line[i];
+			var next = line[i + 1];
+
+			// use look ahead to detect and handle compound operators
+			var token = current switch
+			{
+				0xD6 when next == 0xD4 => "<>",
+				0xD6 when next == 0xD5 => "<=",
+				0xD4 when next == 0xD5 => ">=",
+				_ => null
+			};
+
+			// if not compound operator return
+			if (token == null)
+			{
+				return false;
+			}
+
+			// handle spacing
+			if (NeedsLeadingSpace(sb, token))
+			{
+				sb.Append(' ');
+			}
+
+			// add token and consume second token byte
+			sb.Append(token);
+			i++; 
+
+			// tell caller it was a compound token
+			return true;
+		}
 
 		/// <summary>
 		/// Process current byte and add
@@ -302,10 +415,8 @@ namespace NewDos80BasicDetokenizer
 			switch (b)
 			{
 				case 0x0A:
-					sb.Append('\n');
-					break;
 				case 0x0D:
-					// ignore CR if present
+					// ignore embedded LF/CR inside tokenized line data
 					break;
 				case >= 0x20 and <= 0x7E:
 					// printable character
@@ -322,41 +433,26 @@ namespace NewDos80BasicDetokenizer
 		/// </summary>
 		/// <param name="sb"></param>
 		/// <param name="token"></param>
-		/// <returns></returns>
+		/// <returns>true if not an operator token, false otherwise</returns>
 		private static bool NeedsLeadingSpace(StringBuilder sb, string token)
 		{
+			// ignore if starting fresh
 			if (sb.Length == 0)
 			{
 				return false;
 			}
 
+			// Look at the last character already appended to the line we are building.
+			// If that last character is whitespace, then don't add another leading space.
 			var prev = sb[^1];
 			if (char.IsWhiteSpace(prev))
 			{
 				return false;
 			}
 
+			// if the last character already in sb is one of '(' ',' ';' ':' or '@'
+			// don't insert a leading space before the next token
 			if ("(,;:@".IndexOf(prev) >= 0)
-			{
-				return false;
-			}
-
-			return IsOperator(token) || true;
-		}
-
-		/// <summary>
-		/// Do we need a trailing space after keyword?
-		/// </summary>
-		/// <param name="token">current token</param>
-		/// <returns>true if we need trailing space, false otherwise</returns>
-		private static bool NeedsTrailingSpace(string token)
-		{
-			if (string.IsNullOrEmpty(token))
-			{
-				return false;
-			}
-
-			if (token.EndsWith("("))
 			{
 				return false;
 			}
@@ -365,15 +461,80 @@ namespace NewDos80BasicDetokenizer
 		}
 
 		/// <summary>
-		/// Mat operator?
+		/// Do we need a trailing space after keyword?
 		/// </summary>
 		/// <param name="token">current token</param>
-		/// <returns>true if operator, false otherwise</returns>
+		/// <param name="line">Current line to process</param>
+		/// <param name="index">index into current line</param>
+		/// <returns>true if we need trailing space, false otherwise</returns>
+		/// <remarks>return also takes into account keyword that take params</remarks>
+		private static bool NeedsTrailingSpace(string token, byte[] line, int index)
+		{
+			// check args
+			if (line == null)
+			{
+				throw new ArgumentNullException(nameof(line));
+			}
+
+			// do nothing if empty token
+			if (string.IsNullOrEmpty(token))
+			{
+				return false;
+			}
+
+			// 
+			if (token.EndsWith("("))
+			{
+				return false;
+			}
+
+			// handle simple and compound operators
+			if (IsOperator(token))
+			{
+				return false;
+			}
+
+			// return check if keyword is followed by '('
+			return !NextSignificantByteIsOpenParen(line, index);
+		}
+
+		/// <summary>
+		/// Check if keyword takes args
+		/// </summary>
+		/// <param name="line">Current line to process</param>
+		/// <param name="index">index into current line</param>
+		/// <returns>true if keyword takes args, false otherwise</returns>
+		private static bool NextSignificantByteIsOpenParen(byte[] line, int index)
+		{
+			for (var i = index + 1; i < line.Length; i++)
+			{
+				switch (line[i])
+				{
+					case 0x0A:
+					case 0x0D:
+						continue;
+
+					case (byte)'(':
+						return true;
+
+					default:
+						return false;
+				}
+			}
+
+			return false;
+		}
+
+		/// <summary>
+		/// Is current token a simple or compound operator?
+		/// </summary>
+		/// <param name="token">current token</param>
+		/// <returns>true if any type of operator, false otherwise</returns>
 		private static bool IsOperator(string token)
 		{
 			return token switch
 			{
-				"+" or "-" or "*" or "/" or "=" or ">" => true,
+				"+" or "-" or "*" or "/" or "^" or "=" or ">" or "<" or "<>" or "<=" or ">=" => true,
 				_ => false
 			};
 		}
