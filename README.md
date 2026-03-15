@@ -51,6 +51,7 @@ fidelity is still being refined.
 ## Repository layout
 
 
+```text
 TRS80-Tools/
 ├── .clang-format
 ├── .editorconfig
