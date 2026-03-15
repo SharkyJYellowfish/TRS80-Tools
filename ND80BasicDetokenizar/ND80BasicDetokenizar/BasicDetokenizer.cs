@@ -482,7 +482,7 @@ namespace NewDos80BasicDetokenizer
 				return false;
 			}
 
-			// 
+			// token already includes opening paren
 			if (token.EndsWith("("))
 			{
 				return false;
@@ -494,8 +494,41 @@ namespace NewDos80BasicDetokenizer
 				return false;
 			}
 
+			// OPEN token can be immediately followed by quoted mode, e.g. OPEN"R"
+			if (token == "OPEN" && NextSignificantByteIsQuote(line, index))
+			{
+				return false;
+			}
+
 			// return check if keyword is followed by '('
 			return !NextSignificantByteIsOpenParen(line, index);
+		}
+
+		/// <summary>
+		/// Check if keyword is followed by quote
+		/// </summary>
+		/// <param name="line">Current line to process</param>
+		/// <param name="index">index into current line</param>
+		/// <returns>true if keyword is followed by quote, false otherwise</returns>
+		private static bool NextSignificantByteIsQuote(byte[] line, int index)
+		{
+			for (var i = index + 1; i < line.Length; i++)
+			{
+				switch (line[i])
+				{
+					case 0x0A:
+					case 0x0D:
+						continue;
+
+					case (byte)'"':
+						return true;
+
+					default:
+						return false;
+				}
+			}
+
+			return false;
 		}
 
 		/// <summary>

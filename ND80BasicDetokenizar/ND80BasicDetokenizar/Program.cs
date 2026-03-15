@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 
 // ReSharper disable once CheckNamespace
 namespace NewDos80BasicDetokenizer
@@ -6,12 +6,13 @@ namespace NewDos80BasicDetokenizer
 	internal static class Program
 	{
 		/// <summary>
-		/// 
+		/// Main entry point
 		/// </summary>
-		/// <param name="args"></param>
-		/// <returns></returns>
+		/// <param name="args">command line arguments</param>
+		/// <returns>0 if success, >0 otherwise</returns>
 		private static int Main(string[] args)
 		{
+			// say hello
 			Console.WriteLine("NewDOS/80 Disk Basic Detokenizer Utility v0.8.0");
 
 			// print usage
@@ -57,6 +58,12 @@ namespace NewDos80BasicDetokenizer
 				return 2;
 			}
 		}
+
+		/// <summary>
+		/// Check if the help arg was passed
+		/// </summary>
+		/// <param name="arg">current arg</param>
+		/// <returns>true if help requested, false otherwise</returns>
 		private static bool IsHelpArg(string arg)
 		{
 			return arg.Equals("/?", StringComparison.OrdinalIgnoreCase)
@@ -65,6 +72,9 @@ namespace NewDos80BasicDetokenizer
 			       || arg.Equals("--help", StringComparison.OrdinalIgnoreCase);
 		}
 
+		/// <summary>
+		/// Print valid args and usage
+		/// </summary>
 		private static void PrintUsage()
 		{
 			Console.WriteLine("Usage:");
