@@ -2,7 +2,7 @@
   "profiles": {
     "ND80BasicDetokenizar": {
       "commandName": "Project",
-      "commandLineArgs": "d:\\!\\@\\mainpost.bas d:\\!\\@\\mainpost.detok.txt"
+      "commandLineArgs": "-i d:\\!\\@\\mainpost.bas -o d:\\!\\@\\mainpost.detok.txt -s"
     }
   }
 }

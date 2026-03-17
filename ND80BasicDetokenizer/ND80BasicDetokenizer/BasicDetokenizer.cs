@@ -1,3 +1,31 @@
+///////////////////////////////////////////////////////////////////////////////
+// Copyright (C) 2026 Sharky J. Yellowfish
+// Copyright (C) 2026 Screaming Yellow Fish Engineering
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// File:    BasicDetokenizer.cs
+// Brief:   Main workhorse that converts a tokenized input file and produces ASCII file output
+//
+// Author:  Sharky J. Yellowfish
+// Date:    March 16, 2026
+//
+// Details: Build (MSVC):
+//		dotnet build -c Debug
+//		dotnet build -c Release
+//		dotnet build NewDos80BasicDetokenizer.csproj -c Release
+///////////////////////////////////////////////////////////////////////////////
+
 using System.Text;
 
 // ReSharper disable StringLiteralTypo
@@ -141,12 +169,12 @@ namespace NewDos80BasicDetokenizer
 		};
 
 		/// <summary>
-		/// Take file byte stream and detokenize contents
+		/// Take file byte stream and detokenize contents line by line
 		/// </summary>
 		/// <param name="data">File byte stream input</param>
-		/// <returns>ASCII text</returns>
+		/// <returns>ASCII lines</returns>
 		/// <exception cref="ArgumentException">Requires infile and outfile names</exception>
-		public string DetokenizeProgram(byte[] data)
+		public IEnumerable<string> DetokenizeProgramLines(byte[] data)
 		{
 			// sanity check
 			if (data == null || data.Length == 0)
@@ -162,7 +190,6 @@ namespace NewDos80BasicDetokenizer
 			}
 
 			// walk bytes...
-			var sb = new StringBuilder();
 			while (pos + 4 <= data.Length)
 			{
 				// get next line and check if we are at EOF
@@ -171,7 +198,7 @@ namespace NewDos80BasicDetokenizer
 				pos += 4;
 				if (nextLinePtr == 0 && lineNumber == 0)
 				{
-					break;
+					yield break;
 				}
 
 				// find EOL
@@ -185,13 +212,15 @@ namespace NewDos80BasicDetokenizer
 				var lineText = DetokenizeLine(lineBytes);
 
 				// build ASCII result of detokenized line
+				var sb = new StringBuilder();
 				sb.Append(lineNumber);
 				if (!string.IsNullOrEmpty(lineText))
 				{
 					sb.Append(' ');
 					sb.Append(lineText);
 				}
-				sb.AppendLine();
+
+				yield return sb.ToString();
 
 				// housekeeping before next loop iteration
 				if (pos < data.Length && data[pos] == 0x00)
@@ -200,11 +229,9 @@ namespace NewDos80BasicDetokenizer
 				}
 				if (nextLinePtr == 0)
 				{
-					break;
+					yield break;
 				}
 			}
-
-			return sb.ToString();
 		}
 
 		/// <summary>
@@ -216,13 +243,13 @@ namespace NewDos80BasicDetokenizer
 		{
 			switch (line.Length)
 			{
-			case 0:
-				return string.Empty;
+				case 0:
+					return string.Empty;
 
-			// Whole-line apostrophe comment as stored internally:
-			// 3A 93 FB <text...>
-			case >= 3 when line[0] == 0x3A && line[1] == 0x93 && line[2] == 0xFB:
-				return "'" + DecodeRawAscii(line, 3);
+				// Whole-line apostrophe comment as stored internally:
+				// 3A 93 FB <text...>
+				case >= 3 when line[0] == 0x3A && line[1] == 0x93 && line[2] == 0xFB:
+					return "'" + DecodeRawAscii(line, 3);
 			}
 
 			var sb = new StringBuilder();
@@ -247,15 +274,15 @@ namespace NewDos80BasicDetokenizer
 
 				switch (b)
 				{
-				// start processing quoted text
-				case (byte)'"':
-					sb.Append('"');
-					inQuote = true;
-					continue;
-				// handle normal 7-bit ASCII text
-				case < 0x80:
-					AppendVisibleAscii(sb, b);
-					continue;
+					// start processing quoted text
+					case (byte)'"':
+						sb.Append('"');
+						inQuote = true;
+						continue;
+					// handle normal 7-bit ASCII text
+					case < 0x80:
+						AppendVisibleAscii(sb, b);
+						continue;
 				}
 
 				// check if compound operator and handle accordingly
@@ -269,51 +296,51 @@ namespace NewDos80BasicDetokenizer
 					// Apostrophe comment stored as REM + apostrophe token.
 					// Mid-line form commonly appears after a colon.
 					case 0x93 when i + 1 < line.Length && line[i + 1] == 0xFB:
-					{
-						if (sb.Length == 0 || sb[^1] != ':')
+						{
+							if (sb.Length == 0 || sb[^1] != ':')
+							{
+								if (NeedsLeadingSpace(sb, "'"))
+								{
+									sb.Append(' ');
+								}
+							}
+
+							sb.Append('\'');
+							sb.Append(DecodeRawAscii(line, i + 2));
+							return sb.ToString();
+						}
+
+					// REM: remainder of line is raw text
+					case 0x93:
+						{
+							if (NeedsLeadingSpace(sb, "REM"))
+							{
+								sb.Append(' ');
+							}
+
+							sb.Append("REM");
+
+							if (i + 1 < line.Length && line[i + 1] != (byte)' ')
+							{
+								sb.Append(' ');
+							}
+
+							sb.Append(DecodeRawAscii(line, i + 1));
+							return sb.ToString();
+						}
+
+					// Apostrophe token by itself: remainder of line is raw text
+					case 0xFB:
 						{
 							if (NeedsLeadingSpace(sb, "'"))
 							{
 								sb.Append(' ');
 							}
+
+							sb.Append('\'');
+							sb.Append(DecodeRawAscii(line, i + 1));
+							return sb.ToString();
 						}
-
-						sb.Append('\'');
-						sb.Append(DecodeRawAscii(line, i + 2));
-						return sb.ToString();
-					}
-
-					// REM: remainder of line is raw text
-					case 0x93:
-					{
-						if (NeedsLeadingSpace(sb, "REM"))
-						{
-							sb.Append(' ');
-						}
-
-						sb.Append("REM");
-
-						if (i + 1 < line.Length && line[i + 1] != (byte)' ')
-						{
-							sb.Append(' ');
-						}
-
-						sb.Append(DecodeRawAscii(line, i + 1));
-						return sb.ToString();
-					}
-
-					// Apostrophe token by itself: remainder of line is raw text
-					case 0xFB:
-					{
-						if (NeedsLeadingSpace(sb, "'"))
-						{
-							sb.Append(' ');
-						}
-
-						sb.Append('\'');
-						sb.Append(DecodeRawAscii(line, i + 1));
-						return sb.ToString();
-					}
 				}
 
 				// try to convert token to ASCII keyword
@@ -356,7 +383,7 @@ namespace NewDos80BasicDetokenizer
 			}
 			return sb.ToString();
 		}
-	
+
 		/// <summary>
 		/// Handle case when a compound token is detected 
 		/// </summary>
@@ -399,7 +426,7 @@ namespace NewDos80BasicDetokenizer
 
 			// add token and consume second token byte
 			sb.Append(token);
-			i++; 
+			i++;
 
 			// tell caller it was a compound token
 			return true;
